@@ -112,7 +112,6 @@ Form pre-filled with student details.
 - <img width="1905" height="897" alt="image" src="https://github.com/user-attachments/assets/04febf01-879f-431f-ab07-abcfb993acf1" />
 
 
-
 ---
 
 ## Notes
@@ -121,6 +120,7 @@ Form pre-filled with student details.
 * Delete action includes a confirmation page to prevent accidental deletion
 * Uses `ObjectId` from `bson` to work with MongoDB document IDs
 * If you use MongoDB Atlas on macOS, install dependencies again (`pip install -r requirements.txt`). This project now uses `certifi` CA bundle explicitly to avoid common TLS certificate verification failures with `pymongo`.
+* Update the .env file
 
 ---
 
