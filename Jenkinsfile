@@ -44,7 +44,7 @@ pipeline {
                     python3 -c "import black"
                     python3 -c "import bandit"
 
-                    echo "All dependencies are installed."
+                    echo "Dependencies Verified."
                 '''
             }
         }
@@ -66,6 +66,7 @@ pipeline {
             }
 
             steps {
+
                 echo "========== PYTEST =========="
 
                 sh '''
@@ -76,6 +77,7 @@ pipeline {
 
         stage('Security Scan') {
             steps {
+
                 echo "========== BANDIT =========="
 
                 sh '''
@@ -85,31 +87,43 @@ pipeline {
         }
 
         stage('Deploy to Staging') {
+
             steps {
 
                 echo "========== DEPLOY =========="
 
-                sh """
-ssh -i /var/lib/jenkins/.ssh/raavisairam.pem \
--o StrictHostKeyChecking=no \
-ubuntu@13.232.118.126 '
-set -e
+                sshagent(credentials: ['flask-server']) {
 
-cd /home/ubuntu/flask_Practice
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << 'EOF'
 
-git pull origin main
+                        set -e
 
-source venv/bin/activate
+                        cd ${APP_DIR}
 
-pip install -r requirements.txt
+                        echo "Current Branch:"
+                        git branch
 
-sudo systemctl restart flask-app
+                        echo "Pulling Latest Code..."
+                        git pull origin main
 
-sudo systemctl status flask-app --no-pager
+                        echo "Activating Virtual Environment..."
+                        source venv/bin/activate
 
-echo "Deployment Successful"
-'
-"""
+                        echo "Installing Dependencies..."
+                        pip install -r requirements.txt
+
+                        echo "Restarting Flask Service..."
+                        sudo systemctl restart flask-app
+
+                        echo "Checking Service..."
+                        sudo systemctl status flask-app --no-pager
+
+                        echo "Deployment Successful"
+
+EOF
+                    """
+                }
             }
         }
     }
@@ -117,19 +131,22 @@ echo "Deployment Successful"
     post {
 
         success {
-            echo "====================================="
+
+            echo "===================================="
             echo "BUILD SUCCESSFUL"
             echo "APPLICATION DEPLOYED SUCCESSFULLY"
-            echo "====================================="
+            echo "===================================="
         }
 
         failure {
-            echo "====================================="
+
+            echo "===================================="
             echo "BUILD FAILED"
-            echo "====================================="
+            echo "===================================="
         }
 
         always {
+
             cleanWs()
         }
     }
