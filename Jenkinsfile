@@ -1,15 +1,8 @@
 pipeline {
     agent any
 
-    options {
-        skipDefaultCheckout(true)
-        timestamps()
-    }
-
     environment {
-        DEPLOY_HOST = "13.232.118.126"
-        DEPLOY_USER = "ubuntu"
-        APP_DIR = "/home/ubuntu/flask_Practice"
+        SECRET_KEY = 'SairamFlaskApp'
     }
 
     stages {
@@ -30,9 +23,23 @@ pipeline {
             }
 
             steps {
+
+                echo '========== BUILD =========='
+
                 sh '''
-                    python3 -m pytest --version
-                    python3 -m pip install --break-system-packages -r requirements.txt
+                echo "Creating .env file..."
+
+                cat > .env <<EOF
+MONGO_URI=$MONGO_URI
+SECRET_KEY=$SECRET_KEY
+EOF
+
+                echo "Workspace Contents:"
+                ls -la
+
+                python3 --version
+
+                python3 -m pip install --break-system-packages -r requirements.txt
                 '''
             }
         }
@@ -43,8 +50,11 @@ pipeline {
             }
 
             steps {
+
+                echo '========== TEST =========='
+
                 sh '''
-                    python3 -m pytest -v
+                python3 -m pytest -v
                 '''
             }
         }
@@ -52,40 +62,74 @@ pipeline {
         stage('Deploy') {
             steps {
 
+                echo '========== DEPLOY =========='
+
                 sshagent(credentials: ['flask-server']) {
 
-                    sh """
-ssh -o StrictHostKeyChecking=no ubuntu@13.232.118.126 '
-cd /home/ubuntu/flask_Practice || exit 1
+                    sh '''
+                    ssh -o StrictHostKeyChecking=no ubuntu@13.232.118.126 "
+                        cd /home/ubuntu/flask_Practice
 
-git fetch origin
-git reset --hard origin/main
+                        git pull origin main
 
-source venv/bin/activate
+                        source venv/bin/activate
 
-pip install -r requirements.txt >/dev/null 2>&1
+                        pip install -r requirements.txt
 
-sudo systemctl restart flask-app
+                        sudo systemctl restart flask-app
 
-sudo systemctl is-active flask-app
-'
-"""
+                        sudo systemctl status flask-app --no-pager
+
+                        echo Deployment Successful
+                    "
+                    '''
                 }
-
             }
         }
-
     }
 
     post {
+
+        always {
+            echo 'Pipeline Finished.'
+        }
+
         success {
-            echo 'BUILD SUCCESS'
-            cleanWs()
+
+            echo 'Pipeline Successful!'
+
+            emailext(
+                to: 'YOUR_EMAIL@gmail.com',
+                subject: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+The Jenkins build completed successfully.
+
+Job: ${env.JOB_NAME}
+Build Number: ${env.BUILD_NUMBER}
+Build URL: ${env.BUILD_URL}
+
+Status: SUCCESS
+"""
+            )
         }
 
         failure {
-            echo 'BUILD FAILED'
-            cleanWs()
+
+            echo 'Pipeline Failed!'
+
+            emailext(
+                to: 'YOUR_EMAIL@gmail.com',
+                subject: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+The Jenkins build has failed.
+
+Job: ${env.JOB_NAME}
+Build Number: ${env.BUILD_NUMBER}
+Build URL: ${env.BUILD_URL}
+
+Status: FAILURE
+"""
+            )
         }
     }
 }
