@@ -3,66 +3,72 @@ pipeline {
     options {
         timestamps()
         ansiColor('xterm')
+        disableConcurrentBuilds()
     }
     environment {
-        APP_NAME = "Flask Student App"
+        APP_NAME = "Flask Student Management"
         DEPLOY_HOST = "13.232.118.126"
         DEPLOY_USER = "ubuntu"
         APP_DIR = "/home/ubuntu/flask_Practice"
     }
     stages {
-        stage('Checkout') {
+        stage('Checkout Source') {
             steps {
-                git branch: 'main',
-                credentialsId: 'github-creds',
-                url: 'https://github.com/sairamraavi/flask_Practice.git'
+                echo "========== CHECKOUT =========="
+                git(
+                    branch: 'main',
+                    credentialsId: 'github-creds',
+                    url: 'https://github.com/sairamraavi/flask_Practice.git'
+                )
+                sh 'ls -la'
             }
         }
         stage('Build') {
             steps {
+                echo "========== BUILD =========="
                 sh '''
+                    set -e
 
-                python3 -m venv venv
+                    python3 --version
+                    pip3 --version
 
-                . venv/bin/activate
+                    python3 -m venv venv
 
-                python -m pip install --upgrade pip
+                    . venv/bin/activate
 
-                pip install -r requirements.txt
+                    python -m pip install --upgrade pip
 
+                    pip install -r requirements.txt
                 '''
             }
         }
         stage('Code Formatting') {
             steps {
+                echo "========== BLACK =========="
                 sh '''
+                    . venv/bin/activate
 
-                . venv/bin/activate
-
-                black --check .
-
+                    black --check .
                 '''
             }
         }
         stage('Lint') {
             steps {
+                echo "========== PYLINT =========="
                 sh '''
+                    . venv/bin/activate
 
-                . venv/bin/activate
-
-                pylint *.py || true
-
+                    pylint *.py || true
                 '''
             }
         }
         stage('Security Scan') {
             steps {
+                echo "========== BANDIT =========="
                 sh '''
+                    . venv/bin/activate
 
-                . venv/bin/activate
-
-                bandit -r . || true
-
+                    bandit -r . || true
                 '''
             }
         }
@@ -71,37 +77,52 @@ pipeline {
                 MONGO_URI = credentials('mongo-uri')
             }
             steps {
+                echo "========== PYTEST =========="
                 sh '''
+                    set -e
 
-                . venv/bin/activate
+                    . venv/bin/activate
 
-                pytest -v
-
+                    pytest -v
                 '''
             }
         }
-        stage('Deploy To Staging') {
+        stage('Deploy to Staging') {
             steps {
+                echo "========== DEPLOY =========="
                 sshagent(credentials: ['flask-server']) {
-                    sh '''
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
+                        set -e
 
-                    ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << EOF
+                        echo "=================================="
+                        echo "Deploying Flask Application"
+                        echo "=================================="
 
-                    cd ${APP_DIR}
+                        cd ${APP_DIR}
 
-                    git pull origin main
+                        echo "Current Directory:"
+                        pwd
 
-                    source venv/bin/activate
+                        echo "Pulling Latest Code..."
+                        git pull origin main
 
-                    pip install -r requirements.txt
+                        echo "Activating Virtual Environment..."
+                        source venv/bin/activate
 
-                    sudo systemctl restart flask-app
+                        echo "Installing Dependencies..."
+                        pip install -r requirements.txt
 
-                    sudo systemctl status flask-app --no-pager
+                        echo "Restarting Flask Service..."
+                        sudo systemctl restart flask-app
 
-                    EOF
+                        echo "Checking Flask Service..."
+                        sudo systemctl status flask-app --no-pager
 
-                    '''
+                        echo "Deployment Successful"
+
+                    '
+                    """
                 }
             }
         }
@@ -109,13 +130,40 @@ pipeline {
     post {
         success {
             echo "========================================"
-            echo "Deployment Successful"
+            echo "BUILD SUCCESSFUL"
+            echo "Application Successfully Deployed"
             echo "========================================"
+            emailext(
+                subject: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                Build Status : SUCCESS
+
+                Job Name : ${env.JOB_NAME}
+                Build No : ${env.BUILD_NUMBER}
+
+                URL:
+                ${env.BUILD_URL}
+                """,
+                to: "YOUR_EMAIL@gmail.com"
+            )
         }
         failure {
             echo "========================================"
-            echo "Deployment Failed"
+            echo "BUILD FAILED"
             echo "========================================"
+            emailext(
+                subject: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                Build Status : FAILED
+
+                Job Name : ${env.JOB_NAME}
+                Build No : ${env.BUILD_NUMBER}
+
+                URL:
+                ${env.BUILD_URL}
+                """,
+                to: "YOUR_EMAIL@gmail.com"
+            )
         }
         always {
             cleanWs()
