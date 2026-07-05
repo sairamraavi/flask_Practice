@@ -74,7 +74,7 @@ pipeline {
                 '''
             }
         }
-
+        echo "========== DEPLOY TO STAGING =========="
         stage('Deploy to Staging') {
 
             steps {
