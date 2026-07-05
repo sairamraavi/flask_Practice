@@ -52,13 +52,11 @@ pipeline {
         }
 
         stage('Unit Tests') {
-
             environment {
                 MONGO_URI = credentials('mongo-uri')
             }
 
             steps {
-
                 echo "========== PYTEST =========="
 
                 sh '''
@@ -86,23 +84,31 @@ pipeline {
                 sshagent(credentials: ['flask-server']) {
 
                     sh """
-                    ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << EOF
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
+                            set -e
 
-                    set -e
+                            cd ${APP_DIR}
 
-                    cd ${APP_DIR}
+                            echo "Current Branch:"
+                            git branch
 
-                    git pull origin main
+                            echo "Pull latest code..."
+                            git pull origin main
 
-                    source venv/bin/activate
+                            echo "Activate virtual environment..."
+                            source venv/bin/activate
 
-                    python -m pip install -r requirements.txt
+                            echo "Install dependencies..."
+                            pip install -r requirements.txt
 
-                    sudo systemctl restart flask-app
+                            echo "Restart Flask..."
+                            sudo systemctl restart flask-app
 
-                    sudo systemctl status flask-app --no-pager
+                            echo "Check service..."
+                            sudo systemctl status flask-app --no-pager
 
-                    EOF
+                            echo "Deployment Completed Successfully"
+                        '
                     """
                 }
             }
@@ -112,16 +118,16 @@ pipeline {
     post {
 
         success {
-            echo "===================================="
+            echo "========================================"
             echo "BUILD SUCCESSFUL"
             echo "APPLICATION DEPLOYED SUCCESSFULLY"
-            echo "===================================="
+            echo "========================================"
         }
 
         failure {
-            echo "===================================="
+            echo "========================================"
             echo "BUILD FAILED"
-            echo "===================================="
+            echo "========================================"
         }
 
         always {
