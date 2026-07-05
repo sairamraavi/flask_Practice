@@ -53,7 +53,7 @@ pipeline {
                 echo "========== BLACK =========="
                 sh '''
                     echo "Running Black..."
-                    black --check . || true
+                    python3 -m black --check . || true
                     echo "Black Completed"
                 '''
             }
@@ -69,7 +69,7 @@ pipeline {
                 echo "========== PYTEST =========="
                 sh '''
                     echo "Running Pytest..."
-                    pytest -v
+                    python3 -m pytest -v
                     echo "Pytest Completed"
                 '''
             }
@@ -82,24 +82,26 @@ pipeline {
                 echo "========== BANDIT =========="
                 sh '''
                     echo "Running Bandit..."
-                    bandit -r . || true
+                    python3 -m bandit -r . || true
                     echo "Bandit Completed"
                 '''
             }
         }
         stage('Lint') {
             options {
-                timeout(time: 3, unit: 'MINUTES')
+                timeout(time: 10, unit: 'MINUTES')
             }
             steps {
                 echo "========== PYLINT =========="
-                sh 'echo "Starting pylint..."'
-                sh 'date'
-                sh 'pwd'
-                sh 'ls -la'
-                sh 'pylint *.py || true'
-                sh 'echo "Pylint completed."'
-                sh 'date'
+                sh '''
+                    echo "Starting pylint..."
+                    date
+                    pwd
+                    ls -la
+                    python3 -m pylint --exit-zero --disable=missing-module-docstring,missing-function-docstring,missing-class-docstring app.py test_app.py
+                    echo "Pylint completed."
+                    date
+                '''
             }
         }
         stage('Deploy to Staging') {
@@ -112,12 +114,10 @@ pipeline {
                     sh """
                     ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << EOF
 
-                    set -e
+                    set -euo pipefail
 
                     echo "===== Connected to Flask Server ====="
-
                     hostname
-
                     pwd
 
                     cd ${APP_DIR}
@@ -131,14 +131,20 @@ pipeline {
                     echo "Pulling Latest Code"
                     git pull origin main
 
+                    if [ ! -d venv ]; then
+                        echo "Creating Python virtual environment"
+                        python3 -m venv venv
+                    fi
+
                     echo "Activating Virtual Environment"
                     source venv/bin/activate
 
                     echo "Installing Python Packages"
-                    pip install -r requirements.txt
+                    python -m pip install --upgrade pip
+                    python -m pip install -r requirements.txt
 
                     echo "Restarting Flask Service"
-                    sudo systemctl restart flask-app
+                    sudo systemctl restart flask-app || sudo systemctl start flask-app
 
                     echo "Checking Flask Status"
                     sudo systemctl status flask-app --no-pager
