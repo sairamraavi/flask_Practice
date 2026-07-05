@@ -30,13 +30,21 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Verify Dependencies') {
             steps {
-                echo "========== INSTALL DEPENDENCIES =========="
+                echo "========== VERIFY DEPENDENCIES =========="
 
                 sh '''
-                    python3 -m pip install --upgrade pip --break-system-packages
-                    pip3 install --break-system-packages -r requirements.txt
+                    python3 --version
+                    pip3 --version
+
+                    python3 -c "import flask"
+                    python3 -c "import flask_pymongo"
+                    python3 -c "import pytest"
+                    python3 -c "import black"
+                    python3 -c "import bandit"
+
+                    echo "All dependencies are installed."
                 '''
             }
         }
@@ -52,6 +60,7 @@ pipeline {
         }
 
         stage('Unit Tests') {
+
             environment {
                 MONGO_URI = credentials('mongo-uri')
             }
@@ -76,41 +85,31 @@ pipeline {
         }
 
         stage('Deploy to Staging') {
-
             steps {
 
                 echo "========== DEPLOY =========="
 
-                sshagent(credentials: ['flask-server']) {
+                sh """
+ssh -i /var/lib/jenkins/.ssh/raavisairam.pem \
+-o StrictHostKeyChecking=no \
+ubuntu@13.232.118.126 '
+set -e
 
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
-                            set -e
+cd /home/ubuntu/flask_Practice
 
-                            cd ${APP_DIR}
+git pull origin main
 
-                            echo "Current Branch:"
-                            git branch
+source venv/bin/activate
 
-                            echo "Pull latest code..."
-                            git pull origin main
+pip install -r requirements.txt
 
-                            echo "Activate virtual environment..."
-                            source venv/bin/activate
+sudo systemctl restart flask-app
 
-                            echo "Install dependencies..."
-                            pip install -r requirements.txt
+sudo systemctl status flask-app --no-pager
 
-                            echo "Restart Flask..."
-                            sudo systemctl restart flask-app
-
-                            echo "Check service..."
-                            sudo systemctl status flask-app --no-pager
-
-                            echo "Deployment Completed Successfully"
-                        '
-                    """
-                }
+echo "Deployment Successful"
+'
+"""
             }
         }
     }
@@ -118,16 +117,16 @@ pipeline {
     post {
 
         success {
-            echo "========================================"
+            echo "====================================="
             echo "BUILD SUCCESSFUL"
             echo "APPLICATION DEPLOYED SUCCESSFULLY"
-            echo "========================================"
+            echo "====================================="
         }
 
         failure {
-            echo "========================================"
+            echo "====================================="
             echo "BUILD FAILED"
-            echo "========================================"
+            echo "====================================="
         }
 
         always {
