@@ -13,6 +13,9 @@ pipeline {
     }
     stages {
         stage('Checkout Source') {
+            options {
+                timeout(time: 5, unit: 'MINUTES')
+            }
             steps {
                 echo "========== CHECKOUT =========="
                 git(
@@ -20,92 +23,127 @@ pipeline {
                     credentialsId: 'github-creds',
                     url: 'https://github.com/sairamraavi/flask_Practice.git'
                 )
-                sh "git log --oneline -1"
+                sh 'pwd'
+                sh 'ls -la'
+                sh 'git log --oneline -1'
             }
         }
         stage('Install Dependencies') {
+            options {
+                timeout(time: 10, unit: 'MINUTES')
+            }
             steps {
                 echo "========== INSTALL DEPENDENCIES =========="
+                sh 'python3 --version'
+                sh 'pip3 --version'
                 sh '''
-                    python3 --version
-                    pip3 --version
-
                     python3 -m pip install --upgrade pip --break-system-packages
-
+                '''
+                sh '''
                     pip3 install --break-system-packages -r requirements.txt
                 '''
+                sh 'echo "Dependencies Installed Successfully"'
             }
         }
         stage('Code Formatting') {
+            options {
+                timeout(time: 2, unit: 'MINUTES')
+            }
             steps {
                 echo "========== BLACK =========="
                 sh '''
+                    echo "Running Black..."
                     black --check . || true
-                '''
-            }
-        }
-        stage('Lint') {
-            steps {
-                echo "========== PYLINT =========="
-                sh '''
-                    pylint *.py || true
-                '''
-            }
-        }
-        stage('Security Scan') {
-            steps {
-                echo "========== BANDIT =========="
-                sh '''
-                    bandit -r . || true
+                    echo "Black Completed"
                 '''
             }
         }
         stage('Unit Tests') {
+            options {
+                timeout(time: 5, unit: 'MINUTES')
+            }
             environment {
                 MONGO_URI = credentials('mongo-uri')
             }
             steps {
                 echo "========== PYTEST =========="
                 sh '''
+                    echo "Running Pytest..."
                     pytest -v
+                    echo "Pytest Completed"
                 '''
             }
         }
+        stage('Security Scan') {
+            options {
+                timeout(time: 3, unit: 'MINUTES')
+            }
+            steps {
+                echo "========== BANDIT =========="
+                sh '''
+                    echo "Running Bandit..."
+                    bandit -r . || true
+                    echo "Bandit Completed"
+                '''
+            }
+        }
+        stage('Lint') {
+            options {
+                timeout(time: 3, unit: 'MINUTES')
+            }
+            steps {
+                echo "========== PYLINT =========="
+                sh 'echo "Starting pylint..."'
+                sh 'date'
+                sh 'pwd'
+                sh 'ls -la'
+                sh 'pylint *.py || true'
+                sh 'echo "Pylint completed."'
+                sh 'date'
+            }
+        }
         stage('Deploy to Staging') {
+            options {
+                timeout(time: 10, unit: 'MINUTES')
+            }
             steps {
                 echo "========== DEPLOY =========="
                 sshagent(credentials: ['flask-server']) {
                     sh """
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << 'EOF'
+                    ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << EOF
 
-                        set -e
+                    set -e
 
-                        echo "===== Connected to Flask Server ====="
+                    echo "===== Connected to Flask Server ====="
 
-                        cd ${APP_DIR}
+                    hostname
 
-                        echo "Current Directory:"
-                        pwd
+                    pwd
 
-                        echo "Current Branch:"
-                        git branch
+                    cd ${APP_DIR}
 
-                        echo "Pulling latest code..."
-                        git pull origin main
+                    echo "Repository Status"
+                    git status
 
-                        echo "Activating Virtual Environment..."
-                        source venv/bin/activate
+                    echo "Current Branch"
+                    git branch
 
-                        echo "Installing Dependencies..."
-                        pip install -r requirements.txt
+                    echo "Pulling Latest Code"
+                    git pull origin main
 
-                        echo "Restarting Flask Service..."
-                        sudo systemctl restart flask-app
+                    echo "Activating Virtual Environment"
+                    source venv/bin/activate
 
-                        echo "Checking Service Status..."
-                        sudo systemctl status flask-app --no-pager
+                    echo "Installing Python Packages"
+                    pip install -r requirements.txt
 
-                        echo "Deployment Completed Successfully"
+                    echo "Restarting Flask Service"
+                    sudo systemctl restart flask-app
+
+                    echo "Checking Flask Status"
+                    sudo systemctl status flask-app --no-pager
+
+                    echo "Deployment Successful"
 
 EOF
                     """
@@ -115,15 +153,15 @@ EOF
     }
     post {
         success {
-            echo "===================================="
+            echo "========================================"
             echo "BUILD SUCCESSFUL"
-            echo "Application Successfully Deployed"
-            echo "===================================="
+            echo "APPLICATION DEPLOYED SUCCESSFULLY"
+            echo "========================================"
         }
         failure {
-            echo "===================================="
+            echo "========================================"
             echo "BUILD FAILED"
-            echo "===================================="
+            echo "========================================"
         }
         always {
             cleanWs()
