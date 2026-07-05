@@ -1,6 +1,7 @@
 pipeline {
     agent any
     options {
+        skipDefaultCheckout(true)
         timestamps()
         ansiColor('xterm')
         disableConcurrentBuilds()
@@ -32,13 +33,9 @@ pipeline {
                     python3 --version
                     pip3 --version
 
-                    python3 -m venv venv
+                    python3 -m pip install --upgrade pip --break-system-packages
 
-                    . venv/bin/activate
-
-                    python -m pip install --upgrade pip
-
-                    pip install -r requirements.txt
+                    pip3 install --break-system-packages -r requirements.txt
                 '''
             }
         }
@@ -46,8 +43,6 @@ pipeline {
             steps {
                 echo "========== BLACK =========="
                 sh '''
-                    . venv/bin/activate
-
                     black --check .
                 '''
             }
@@ -56,8 +51,6 @@ pipeline {
             steps {
                 echo "========== PYLINT =========="
                 sh '''
-                    . venv/bin/activate
-
                     pylint *.py || true
                 '''
             }
@@ -66,8 +59,6 @@ pipeline {
             steps {
                 echo "========== BANDIT =========="
                 sh '''
-                    . venv/bin/activate
-
                     bandit -r . || true
                 '''
             }
@@ -79,10 +70,6 @@ pipeline {
             steps {
                 echo "========== PYTEST =========="
                 sh '''
-                    set -e
-
-                    . venv/bin/activate
-
                     pytest -v
                 '''
             }
@@ -95,28 +82,22 @@ pipeline {
                     ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
                         set -e
 
-                        echo "=================================="
+                        echo "======================================="
                         echo "Deploying Flask Application"
-                        echo "=================================="
+                        echo "======================================="
 
                         cd ${APP_DIR}
 
-                        echo "Current Directory:"
-                        pwd
-
-                        echo "Pulling Latest Code..."
+                        echo "Pulling latest code..."
                         git pull origin main
 
-                        echo "Activating Virtual Environment..."
-                        source venv/bin/activate
+                        echo "Installing dependencies..."
+                        pip3 install --break-system-packages -r requirements.txt
 
-                        echo "Installing Dependencies..."
-                        pip install -r requirements.txt
-
-                        echo "Restarting Flask Service..."
+                        echo "Restarting Flask service..."
                         sudo systemctl restart flask-app
 
-                        echo "Checking Flask Service..."
+                        echo "Checking service status..."
                         sudo systemctl status flask-app --no-pager
 
                         echo "Deployment Successful"
@@ -133,37 +114,11 @@ pipeline {
             echo "BUILD SUCCESSFUL"
             echo "Application Successfully Deployed"
             echo "========================================"
-            emailext(
-                subject: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-                Build Status : SUCCESS
-
-                Job Name : ${env.JOB_NAME}
-                Build No : ${env.BUILD_NUMBER}
-
-                URL:
-                ${env.BUILD_URL}
-                """,
-                to: "YOUR_EMAIL@gmail.com"
-            )
         }
         failure {
             echo "========================================"
             echo "BUILD FAILED"
             echo "========================================"
-            emailext(
-                subject: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-                Build Status : FAILED
-
-                Job Name : ${env.JOB_NAME}
-                Build No : ${env.BUILD_NUMBER}
-
-                URL:
-                ${env.BUILD_URL}
-                """,
-                to: "YOUR_EMAIL@gmail.com"
-            )
         }
         always {
             cleanWs()
