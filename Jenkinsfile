@@ -95,34 +95,32 @@ pipeline {
                 sshagent(credentials: ['flask-server']) {
 
                     sh """
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} << 'EOF'
+ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_HOST} '
+set -e
 
-                        set -e
+cd ${APP_DIR}
 
-                        cd ${APP_DIR}
+echo "Current Branch:"
+git branch
 
-                        echo "Current Branch:"
-                        git branch
+echo "Pull Latest Code"
+git pull origin main
 
-                        echo "Pulling Latest Code..."
-                        git pull origin main
+echo "Activate Virtual Environment"
+source venv/bin/activate
 
-                        echo "Activating Virtual Environment..."
-                        source venv/bin/activate
+echo "Install Requirements"
+pip install -r requirements.txt
 
-                        echo "Installing Dependencies..."
-                        pip install -r requirements.txt
+echo "Restart Flask"
+sudo systemctl restart flask-app
 
-                        echo "Restarting Flask Service..."
-                        sudo systemctl restart flask-app
+echo "Check Flask Status"
+sudo systemctl is-active flask-app
 
-                        echo "Checking Service..."
-                        sudo systemctl status flask-app --no-pager
-
-                        echo "Deployment Successful"
-
-EOF
-                    """
+echo "Deployment Successful"
+'
+"""
                 }
             }
         }
