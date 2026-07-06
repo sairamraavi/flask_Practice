@@ -55,12 +55,7 @@ pip install -r requirements.txt
 Flask
 Flask-PyMongo
 python-dotenv
-pymongo
-certifi
-pytest
-pylint
-bandit
-black
+bson
 ```
 
 ### 4. Configure environment variables
