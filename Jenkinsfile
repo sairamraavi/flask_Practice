@@ -1,32 +1,47 @@
 pipeline {
     agent any
 
+    options {
+        timestamps()
+        timeout(time: 20, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
     environment {
-        SECRET_KEY = 'SairamFlaskApp'
+        GIT_REPO      = 'https://github.com/sairamraavi/flask_Practice.git'
+        BRANCH        = 'main'
+        FLASK_SERVER  = '13.203.103.161'
+        APP_DIR       = '/home/ubuntu/flask_Practice'
+        SECRET_KEY    = 'SairamFlaskApp'
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Source') {
             steps {
+                cleanWs()
+
                 git(
-                    branch: 'main',
+                    branch: "${BRANCH}",
                     credentialsId: 'github-creds',
-                    url: 'https://github.com/sairamraavi/flask_Practice.git'
+                    url: "${GIT_REPO}"
                 )
             }
         }
 
         stage('Build') {
+
             environment {
                 MONGO_URI = credentials('mongo-uri')
             }
 
             steps {
 
-                echo '========== BUILD =========='
+                echo "========== BUILD =========="
 
                 sh '''
+                set -e
+
                 echo "Creating .env file..."
 
                 cat > .env <<EOF
@@ -34,56 +49,96 @@ MONGO_URI=$MONGO_URI
 SECRET_KEY=$SECRET_KEY
 EOF
 
-                echo "Workspace Contents:"
-                ls -la
-
                 python3 --version
 
-                python3 -m pip install --break-system-packages -r requirements.txt
+                python3 -m venv jenkins_venv
+
+                . jenkins_venv/bin/activate
+
+                python -m pip install --upgrade pip
+
+                pip install -r requirements.txt
+
+                ls -la
                 '''
             }
         }
 
-        stage('Test') {
-            environment {
-                MONGO_URI = credentials('mongo-uri')
-            }
+        stage('Unit Test') {
 
             steps {
 
-                echo '========== TEST =========='
+                echo "========== UNIT TEST =========="
 
                 sh '''
-                python3 -m pytest -v
+                set -e
+
+                . jenkins_venv/bin/activate
+
+                python -m pytest -v
                 '''
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy to Flask Server') {
+
             steps {
 
-                echo '========== DEPLOY =========='
+                echo "========== DEPLOY =========="
 
                 sshagent(credentials: ['flask-server']) {
 
                     sh '''
-                    ssh -o StrictHostKeyChecking=no ubuntu@13.203.103.161 "
-                        cd /home/ubuntu/flask_Practice
+                    set -e
+
+                    echo "Copying .env file..."
+
+                    scp -o StrictHostKeyChecking=no .env ubuntu@$FLASK_SERVER:/tmp/.env
+
+                    echo "Deploying application..."
+
+                    ssh -o StrictHostKeyChecking=no ubuntu@$FLASK_SERVER << EOF
+
+                        set -e
+
+                        cd $APP_DIR
 
                         git pull origin main
+
+                        if [ ! -d venv ]
+                        then
+                            python3 -m venv venv
+                        fi
 
                         source venv/bin/activate
 
                         pip install -r requirements.txt
 
+                        cp /tmp/.env .env
+
                         sudo systemctl restart flask-app
 
-                        sudo systemctl status flask-app --no-pager
+                        sudo systemctl is-active flask-app
 
-                        echo Deployment Successful
-                    "
+                        rm -f /tmp/.env
+
+EOF
                     '''
                 }
+            }
+        }
+
+        stage('Health Check') {
+
+            steps {
+
+                echo "========== HEALTH CHECK =========="
+
+                sh '''
+                sleep 5
+
+                curl -I http://13.203.103.161
+                '''
             }
         }
     }
@@ -91,43 +146,53 @@ EOF
     post {
 
         always {
-            echo 'Pipeline Finished.'
+
+            echo "Cleaning workspace..."
+
+            sh '''
+            rm -rf jenkins_venv
+            rm -f .env
+            '''
+
+            cleanWs()
         }
 
         success {
 
-            echo 'Pipeline Successful!'
+            echo "BUILD SUCCESSFUL"
 
             emailext(
-                to: 'YOUR_EMAIL@gmail.com',
-                subject: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                to: 'sairamraavi1994@gmail.com',
+                subject: "SUCCESS : ${JOB_NAME} #${BUILD_NUMBER}",
                 body: """
-The Jenkins build completed successfully.
+Job Name : ${JOB_NAME}
 
-Job: ${env.JOB_NAME}
-Build Number: ${env.BUILD_NUMBER}
-Build URL: ${env.BUILD_URL}
+Build Number : ${BUILD_NUMBER}
 
-Status: SUCCESS
+Status : SUCCESS
+
+Build URL :
+${BUILD_URL}
 """
             )
         }
 
         failure {
 
-            echo 'Pipeline Failed!'
+            echo "BUILD FAILED"
 
             emailext(
                 to: 'sairamraavi1994@gmail.com',
-                subject: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                subject: "FAILED : ${JOB_NAME} #${BUILD_NUMBER}",
                 body: """
-The Jenkins build has failed.
+Job Name : ${JOB_NAME}
 
-Job: ${env.JOB_NAME}
-Build Number: ${env.BUILD_NUMBER}
-Build URL: ${env.BUILD_URL}
+Build Number : ${BUILD_NUMBER}
 
-Status: FAILURE
+Status : FAILED
+
+Build URL :
+${BUILD_URL}
 """
             )
         }
