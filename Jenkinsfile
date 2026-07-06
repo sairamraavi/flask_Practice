@@ -67,7 +67,7 @@ EOF
                 sshagent(credentials: ['flask-server']) {
 
                     sh '''
-                    ssh -o StrictHostKeyChecking=no ubuntu@13.232.118.126 "
+                    ssh -o StrictHostKeyChecking=no ubuntu@13.203.103.161 "
                         cd /home/ubuntu/flask_Practice
 
                         git pull origin main
